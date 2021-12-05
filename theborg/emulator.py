@@ -30,7 +30,7 @@ from . import radam
 
 #===================================================================================================
 # simple multi-layer perceptron model
-class Payne_model(torch.nn.Module):
+class EmulatorModel(torch.nn.Module):
     def __init__(self, dim_in, num_neurons, num_features, mask_size, num_pixel):
         super(Payne_model, self).__init__()
         self.features = torch.nn.Sequential(
@@ -44,76 +44,12 @@ class Payne_model(torch.nn.Module):
     def forward(self, x):
         return self.features(x)
 
-#---------------------------------------------------------------------------------------------------
-# resnet models
-'''
-class Payne_model(torch.nn.Module):
-    def __init__(self, dim_in, num_neurons, num_features, mask_size, num_pixel):
-        super(Payne_model, self).__init__()
-        self.features = torch.nn.Sequential(
-            torch.nn.Linear(dim_in, num_neurons),
-            torch.nn.LeakyReLU(),
-            torch.nn.Linear(num_neurons, num_neurons),
-            torch.nn.LeakyReLU(),
-            torch.nn.Linear(num_neurons, num_features),
-        )
-
-        self.deconv1 = torch.nn.ConvTranspose1d(64, 64, mask_size, stride=3, padding=5)
-        self.deconv2 = torch.nn.ConvTranspose1d(64, 64, mask_size, stride=3, padding=5)
-        self.deconv3 = torch.nn.ConvTranspose1d(64, 64, mask_size, stride=3, padding=5)
-        self.deconv4 = torch.nn.ConvTranspose1d(64, 64, mask_size, stride=3, padding=5)
-        self.deconv5 = torch.nn.ConvTranspose1d(64, 64, mask_size, stride=3, padding=5)
-        self.deconv6 = torch.nn.ConvTranspose1d(64, 32, mask_size, stride=3, padding=5)
-        self.deconv7 = torch.nn.ConvTranspose1d(32, 1, mask_size, stride=3, padding=5)
-
-        self.deconv2b = torch.nn.ConvTranspose1d(64, 64, 1, stride=3)
-        self.deconv3b = torch.nn.ConvTranspose1d(64, 64, 1, stride=3)
-        self.deconv4b = torch.nn.ConvTranspose1d(64, 64, 1, stride=3)
-        self.deconv5b = torch.nn.ConvTranspose1d(64, 64, 1, stride=3)
-        self.deconv6b = torch.nn.ConvTranspose1d(64, 32, 1, stride=3)
-
-        self.relu2 = torch.nn.LeakyReLU()
-        self.relu3 = torch.nn.LeakyReLU()
-        self.relu4 = torch.nn.LeakyReLU()
-        self.relu5 = torch.nn.LeakyReLU()
-        self.relu6 = torch.nn.LeakyReLU()
-
-        self.num_pixel = num_pixel
-
-    def forward(self, x):
-        x = self.features(x)[:,None,:]
-        x = x.view(x.shape[0], 64, 5)
-        x1 = self.deconv1(x)
-
-        x2 = self.deconv2(x1)
-        x2 += self.deconv2b(x1)
-        x2 = self.relu2(x2)
-
-        x3 = self.deconv3(x2)
-        x3 += self.deconv3b(x2)
-        x3 = self.relu2(x3)
-
-        x4 = self.deconv4(x3)
-        x4 += self.deconv4b(x3)
-        x4 = self.relu2(x4)
-
-        x5 = self.deconv5(x4)
-        x5 += self.deconv5b(x4)
-        x5 = self.relu2(x5)
-
-        x6 = self.deconv6(x5)
-        x6 += self.deconv6b(x5)
-        x6 = self.relu2(x6)
-
-        x7 = self.deconv7(x6)[:,0,:self.num_pixel]
-        return x7
-'''
-
 #===================================================================================================
 # train neural networks
 def neural_net(training_labels, training_spectra, validation_labels, validation_spectra,\
                num_neurons = 300, num_steps=1e4, learning_rate=1e-4, batch_size=512,\
-               num_features = 64*5, mask_size=11, num_pixel=7214, cuda=True, name=None):
+               num_features = 64*5, mask_size=11, num_pixel=7214, cuda=True, name=None,
+               label_names=None):
 
     '''
     Training a neural net to emulate spectral models
@@ -189,8 +125,8 @@ def neural_net(training_labels, training_spectra, validation_labels, validation_
     x_valid = Variable(torch.from_numpy(x_valid)).type(dtype)
     y_valid = Variable(torch.from_numpy(validation_spectra), requires_grad=False).type(dtype)
 
-    # initiate Payne and optimizer
-    model = Payne_model(dim_in, num_neurons, num_features, mask_size, num_pixel)
+    # initiate EmulatorModel and optimizer
+    model = EmulatorModel(dim_in, num_neurons, num_features, mask_size, num_pixel)
     if cuda:
         model.cuda()
     model.train()
@@ -286,7 +222,8 @@ def neural_net(training_labels, training_spectra, validation_labels, validation_
                          num_neurons=num_neurons,\
                          num_steps=num_steps,\
                          batch_size=batch_size,\
-                         labels=training_labels)
+                         training_labels=training_labels,\
+                         labels=label_names)
 
                 # save the training loss
                 np.savez(lossfile,\
@@ -316,7 +253,8 @@ def neural_net(training_labels, training_spectra, validation_labels, validation_
              num_neurons=num_neurons,\
              num_steps=num_steps,\
              batch_size=batch_size,\
-             labels=training_labels)             
+             training_labels=training_labels,\
+             labels=label_names)
 
     # save the final training loss
     np.savez(lossfile,\
