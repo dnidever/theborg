@@ -9,7 +9,7 @@ from . import radam
 #===================================================================================================
 # convolutional models
 # simple multi-layer perceptron model
-class classifier(torch.nn.Module):
+class ClassifierModel(torch.nn.Module):
     def __init__(self, dim_in, num_neurons, num_channels, mask_size, stride_size, num_group):
         super(classifier, self).__init__()
 

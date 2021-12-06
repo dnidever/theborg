@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 setup(name='theborg',
       version='1.0.0',
       description='Artificial Neural Network routines',
-      author='David Nidever',
+      author='David Nidever, Yuan-Sen Ting',
       author_email='dnidever@montana.edu',
       url='https://github.com/dnidever/theborg',
       packages=find_packages(exclude=["tests"]),
