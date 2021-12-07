@@ -1,5 +1,5 @@
 
-Thhe Borg
+The Borg
 =========
 
 Artificial Neural Network routines.
