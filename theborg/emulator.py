@@ -39,7 +39,7 @@ def leaky_relu(z):
 # simple multi-layer perceptron model
 class EmulatorModel(torch.nn.Module):
     def __init__(self, dim_in, num_neurons, num_features):
-        super(Emulatormodel, self).__init__()
+        super(EmulatorModel, self).__init__()
         self.features = torch.nn.Sequential(
             torch.nn.Linear(dim_in, num_neurons),
             torch.nn.LeakyReLU(),
@@ -56,16 +56,18 @@ class EmulatorModel(torch.nn.Module):
 # simple multi-layer perceptron model
 
 class Emulator(object):
-    def __init__(self, dim_in, num_neurons, num_features):
+    def __init__(self, dim_in=4, num_neurons=100, num_features=500, training_data=None, training_labels=None):
         self.model = EmulatorModel(dim_in, num_neurons, num_features)
         self.trained = False
         self.training_loss = []
-        self.validation_loss = []        
+        self.validation_loss = []
+        self.training_data = training_data
+        self.training_labels = training_labels
         
     def __call__(self,labels):
         """ Return the model value."""
         # Input labels should be unscaled
-        data = self._data[col]
+        data = self._data
         # assuming your NN has two hidden layers.
         x_min, x_max = data['x_min'],data['x_max']
         scaled_labels = (labels-x_min)/(x_max-x_min) - 0.5   # scale the labels
@@ -75,33 +77,40 @@ class Emulator(object):
 
         inside = np.einsum('ij,j->i', w_array_0, scaled_labels) + b_array_0
         outside = np.einsum('ij,j->i', w_array_1, leaky_relu(inside)) + b_array_1
-        model = np.einsum('ij,j->i', w_array_2, leaky_relu(outside)) + b_array_2        
+        model = np.einsum('ij,j->i', w_array_2, leaky_relu(outside)) + b_array_2
+
+        # maybe use model.forward()
+        # need to input torch tensor variable values
+        #dtype = torch.FloatTensor
+        #x = Variable(torch.from_numpy(np.array(labels))).type(dtype)  
+        #out = self.model.forward(x)
+        
         return model
 
     def write(self,outfile):
         """ Write the model to a file."""
-            # save parameters and remember how we scaled the labels
-            np.savez(outfile,
-                     w_array_0 = self._data['w_array_0'],
-                     b_array_0 = self._data['b_array_0'],
-                     w_array_1 = self._data['w_array_1'],
-                     b_array_1 = self._data['b_array_1'],
-                     w_array_2 = self._data['w_array_2'],
-                     b_array_2 = self._data['b_array_2'],
-                     x_max = self._data['x_max'],
-                     x_min = self._data['x_min'],
-                     num_labels = self._data['num_labels'],
-                     num_features = self._data['num_features'],
-                     learning_rate = self._data['learning_rate'],
-                     num_neurons = self._data['num_neurons'],
-                     num_steps = self._data['num_steps'],
-                     batch_size = self._data['batch_size'],
-                     labels = self._data['labels']
-                     training_loss = self.training_loss
-                     validation_loss = self.validation_loss)
+        # save parameters and remember how we scaled the labels
+        np.savez(outfile,
+                 w_array_0 = self._data['w_array_0'],
+                 b_array_0 = self._data['b_array_0'],
+                 w_array_1 = self._data['w_array_1'],
+                 b_array_1 = self._data['b_array_1'],
+                 w_array_2 = self._data['w_array_2'],
+                 b_array_2 = self._data['b_array_2'],
+                 x_max = self._data['x_max'],
+                 x_min = self._data['x_min'],
+                 num_labels = self._data['num_labels'],
+                 num_features = self._data['num_features'],
+                 learning_rate = self._data['learning_rate'],
+                 num_neurons = self._data['num_neurons'],
+                 num_steps = self._data['num_steps'],
+                 batch_size = self._data['batch_size'],
+                 labels = self._data['labels'],
+                 training_loss = self.training_loss,
+                 validation_loss = self.validation_loss)
 
     @classmethod
-    def read(cls,file):
+    def read(cls,infile):
         """ Read the model from a file."""
         temp = np.load(infile)
         model_data = {}
@@ -109,14 +118,14 @@ class Emulator(object):
             model_data[f] = temp[f]
         mout = Emulator(model_data['num_labels'], model_data['num_neurons'], model_data['num_features'])
         mout.trained = True
-        mout._data = model_dta
+        mout._data = model_data
         return mout
         
     #===================================================================================================
     # train neural networks
     def train(self,training_labels, training_data, validation_labels=None, validation_data=None,
-              validation_slip=0.2, num_neurons=None, num_steps=1e4, learning_rate=1e-4, batch_size=200,
-              num_features=None, num_pixel=None, cuda=True, name=None,shuffle=True,
+              validation_split=0.2, num_neurons=None, num_steps=1e4, learning_rate=1e-4, batch_size=200,
+              num_features=None, cuda=False, name=None,shuffle=True,
               label_names=None):
 
         '''
@@ -174,9 +183,15 @@ class Emulator(object):
             dtype = torch.FloatTensor
             torch.set_default_tensor_type('torch.FloatTensor')   
 
+        # Default label names
+        if label_names is None:
+            label_names = []
+            for i in range(len(num_labels)):
+                label_names.append('label'+str(i+1))
 
         # Shuffle the data
-        ndata,nfeatures = training_data.shape
+        ndata,num_features = training_data.shape
+        ndata2,num_labels = training_labels.shape
         ind = np.arange(ndata)
         if shuffle:
             np.random.shuffle(ind)  # shuffle in place
@@ -184,23 +199,30 @@ class Emulator(object):
         # Validation split
         if validation_labels is None and validation_data is None and validation_split is not None:
             vsi = np.arange(ndata)
-            np.random.shuffle(vsi)   # suffle
+            np.random.shuffle(vsi)   # shuffle
             vsi = vsi[0:int(np.round(validation_split*ndata))]  # only want validation_split
             vind = ind[vsi]
             ind = np.delete(ind,vsi)   # remove these from the training set
-            validation_labels = training_data[vind,:] 
+            validation_data = training_data[vind,:] 
             validation_labels = training_labels[vind,:]
 
         # Default num_neurons
         if num_neurons is None:
-            num_neurons = 2*nfeatures
+            num_neurons = 2*num_features
             print('num_neurons not input.  Using 2*Nfeatures = ',num_neurons)
             
+        # Re-initialize the model and trained data and history
+        self.model = EmulatorModel(num_labels, num_neurons, num_features)
+        self._data = None
+        self.training_loss = []
+        self.validation_loss = []
+        self.trained = False
+        
         # scale the labels, optimizing neural networks is easier if the labels are more normalized
         x_max = np.max(training_labels[ind,:], axis = 0)
         x_min = np.min(training_labels[ind,:], axis = 0)
         x = (training_labels[ind,:] - x_min)/(x_max - x_min) - 0.5
-        x_valid = (validation_labels[ind,:]-x_min)/(x_max-x_min) - 0.5
+        x_valid = (validation_labels-x_min)/(x_max-x_min) - 0.5
 
         # dimension of the input
         dim_in = x.shape[1]
@@ -216,7 +238,7 @@ class Emulator(object):
         y_valid = Variable(torch.from_numpy(validation_data), requires_grad=False).type(dtype)
 
         # initiate EmulatorModel and optimizer
-        model = self.model(dim_in, num_neurons, num_features, mask_size, num_pixel)
+        model = self.model
         if cuda:
             model.cuda()
         model.train()
@@ -300,7 +322,7 @@ class Emulator(object):
                     model_data['b_array_2'] = model_numpy[5]
                     model_data['x_min'] = x_min
                     model_data['x_max'] = x_max
-                    model_data['num_labels'] = nlabels
+                    model_data['num_labels'] = num_labels
                     model_data['num_features'] = num_features                    
                     model_data['learning_rate'] = learning_rate
                     model_data['num_neurons'] = num_neurons
@@ -312,7 +334,7 @@ class Emulator(object):
                     model_data['validation_loss'] = loss_valid_data
 
                     self._data = model_data
-                    self.training_loss = training_Loss                    
+                    self.training_loss = training_loss                    
                     self.validation_loss = validation_loss
 
 
@@ -328,7 +350,7 @@ class Emulator(object):
         model_data['b_array_2'] = model_numpy[5]
         model_data['x_min'] = x_min
         model_data['x_max'] = x_max
-        model_data['num_labels'] = nlabels
+        model_data['num_labels'] = num_labels
         model_data['num_features'] = num_features                    
         model_data['learning_rate'] = learning_rate
         model_data['num_neurons'] = num_neurons
@@ -340,6 +362,6 @@ class Emulator(object):
         model_data['validation_loss'] = loss_valid_data
 
         self._data = model_data
-        self.training_loss = training_Loss                    
+        self.training_loss = training_loss                    
         self.validation_loss = validation_loss
         self.trained = True
