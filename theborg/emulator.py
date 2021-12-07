@@ -61,6 +61,8 @@ class Emulator(object):
     def __init__(self, dim_in=4, num_neurons=100, num_features=500, training_data=None, training_labels=None):
         self.model = EmulatorModel(dim_in, num_neurons, num_features)
         self.trained = False
+        self.num_labels = None
+        self.num_features = None
         self.training_loss = []
         self.validation_loss = []
         self.training_data = training_data
@@ -137,6 +139,10 @@ class Emulator(object):
             mout = Emulator(model_data['num_labels'], model_data['num_neurons'], model_data['num_features'])
             mout.trained = True
             mout._data = model_data
+            mout.training_loss = model_data['training_loss']
+            mout.validation_loss = model_data['validation_loss']
+            mout.num_labels = model_data['num_labels']
+            mout.num_features = model_data['num_features']            
             # Create the model state dictionary
             state_dict = OrderedDict()
             dtype = torch.FloatTensor            
@@ -247,6 +253,8 @@ class Emulator(object):
         self.training_loss = []
         self.validation_loss = []
         self.trained = False
+        self.num_labels = num_labels
+        self.num_features = num_features
         
         # scale the labels, optimizing neural networks is easier if the labels are more normalized
         x_max = np.max(training_labels[ind,:], axis = 0)
