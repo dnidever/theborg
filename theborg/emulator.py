@@ -38,14 +38,14 @@ def leaky_relu(z):
 #===================================================================================================
 # simple multi-layer perceptron model
 class EmulatorModel(torch.nn.Module):
-    def __init__(self, dim_in, num_neurons, num_features, num_pixel):
+    def __init__(self, dim_in, num_neurons, num_features):
         super(Emulatormodel, self).__init__()
         self.features = torch.nn.Sequential(
             torch.nn.Linear(dim_in, num_neurons),
             torch.nn.LeakyReLU(),
             torch.nn.Linear(num_neurons, num_neurons),
             torch.nn.LeakyReLU(),
-            torch.nn.Linear(num_neurons, num_pixel),
+            torch.nn.Linear(num_neurons, num_features),
         )
 
     def forward(self, x):
@@ -56,8 +56,8 @@ class EmulatorModel(torch.nn.Module):
 # simple multi-layer perceptron model
 
 class Emulator(object):
-    def __init__(self, dim_in, num_neurons, num_features, num_pixel):
-        self.model = EmulatorModel(dim_in, num_neurons, num_features, num_pixel)
+    def __init__(self, dim_in, num_neurons, num_features):
+        self.model = EmulatorModel(dim_in, num_neurons, num_features)
         self.trained = False
         self.training_loss = []
         self.validation_loss = []        
@@ -78,6 +78,40 @@ class Emulator(object):
         model = np.einsum('ij,j->i', w_array_2, leaky_relu(outside)) + b_array_2        
         return model
 
+    def write(self,outfile):
+        """ Write the model to a file."""
+            # save parameters and remember how we scaled the labels
+            np.savez(outfile,
+                     w_array_0 = self._data['w_array_0'],
+                     b_array_0 = self._data['b_array_0'],
+                     w_array_1 = self._data['w_array_1'],
+                     b_array_1 = self._data['b_array_1'],
+                     w_array_2 = self._data['w_array_2'],
+                     b_array_2 = self._data['b_array_2'],
+                     x_max = self._data['x_max'],
+                     x_min = self._data['x_min'],
+                     num_labels = self._data['num_labels'],
+                     num_features = self._data['num_features'],
+                     learning_rate = self._data['learning_rate'],
+                     num_neurons = self._data['num_neurons'],
+                     num_steps = self._data['num_steps'],
+                     batch_size = self._data['batch_size'],
+                     labels = self._data['labels']
+                     training_loss = self.training_loss
+                     validation_loss = self.validation_loss)
+
+    @classmethod
+    def read(cls,file):
+        """ Read the model from a file."""
+        temp = np.load(infile)
+        model_data = {}
+        for f in temp.files:
+            model_data[f] = temp[f]
+        mout = Emulator(model_data['num_labels'], model_data['num_neurons'], model_data['num_features'])
+        mout.trained = True
+        mout._data = model_dta
+        return mout
+        
     #===================================================================================================
     # train neural networks
     def train(self,training_labels, training_data, validation_labels=None, validation_data=None,
@@ -308,3 +342,4 @@ class Emulator(object):
         self._data = model_data
         self.training_loss = training_Loss                    
         self.validation_loss = validation_loss
+        self.trained = True
