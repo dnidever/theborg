@@ -24,6 +24,8 @@ import sys
 import os
 import torch
 import time
+import dill as pickle
+from collections import OrderedDict
 from torch.autograd import Variable
 from . import radam
 
@@ -66,61 +68,89 @@ class Emulator(object):
         
     def __call__(self,labels):
         """ Return the model value."""
-        # Input labels should be unscaled
+
+        if self.trained==False:
+            print('Model is not trained yet')
+            return None
+        
+        ## Input labels should be unscaled
         data = self._data
-        # assuming your NN has two hidden layers.
+        ## assuming your NN has two hidden layers.
         x_min, x_max = data['x_min'],data['x_max']
         scaled_labels = (labels-x_min)/(x_max-x_min) - 0.5   # scale the labels
         
-        w_array_0, w_array_1, w_array_2 = data['w_array_0'],data['w_array_1'],data['w_array_2']
-        b_array_0, b_array_1, b_array_2 = data['b_array_0'],data['b_array_1'],data['b_array_2']            
+        #w_array_0, w_array_1, w_array_2 = data['w_array_0'],data['w_array_1'],data['w_array_2']
+        #b_array_0, b_array_1, b_array_2 = data['b_array_0'],data['b_array_1'],data['b_array_2'] 
+        #inside = np.einsum('ij,j->i', w_array_0, scaled_labels) + b_array_0
+        #outside = np.einsum('ij,j->i', w_array_1, leaky_relu(inside)) + b_array_1
+        #out = np.einsum('ij,j->i', w_array_2, leaky_relu(outside)) + b_array_2
 
-        inside = np.einsum('ij,j->i', w_array_0, scaled_labels) + b_array_0
-        outside = np.einsum('ij,j->i', w_array_1, leaky_relu(inside)) + b_array_1
-        model = np.einsum('ij,j->i', w_array_2, leaky_relu(outside)) + b_array_2
-
-        # maybe use model.forward()
-        # need to input torch tensor variable values
-        #dtype = torch.FloatTensor
-        #x = Variable(torch.from_numpy(np.array(labels))).type(dtype)  
-        #out = self.model.forward(x)
+        # Use model.forward()
+        #  need to input torch tensor variable values
+        dtype = torch.FloatTensor
+        x = Variable(torch.from_numpy(np.array(scaled_labels))).type(dtype)  
+        out = self.model.forward(x)
+        out = out.detach().numpy()
         
-        return model
+        return out
 
-    def write(self,outfile):
+    def save(self,outfile,npz=False):
         """ Write the model to a file."""
         # save parameters and remember how we scaled the labels
-        np.savez(outfile,
-                 w_array_0 = self._data['w_array_0'],
-                 b_array_0 = self._data['b_array_0'],
-                 w_array_1 = self._data['w_array_1'],
-                 b_array_1 = self._data['b_array_1'],
-                 w_array_2 = self._data['w_array_2'],
-                 b_array_2 = self._data['b_array_2'],
-                 x_max = self._data['x_max'],
-                 x_min = self._data['x_min'],
-                 num_labels = self._data['num_labels'],
-                 num_features = self._data['num_features'],
-                 learning_rate = self._data['learning_rate'],
-                 num_neurons = self._data['num_neurons'],
-                 num_steps = self._data['num_steps'],
-                 batch_size = self._data['batch_size'],
-                 labels = self._data['labels'],
-                 training_loss = self.training_loss,
-                 validation_loss = self.validation_loss)
-
+        if npz:
+            np.savez(outfile,
+                     w_array_0 = self._data['w_array_0'],
+                     b_array_0 = self._data['b_array_0'],
+                     w_array_1 = self._data['w_array_1'],
+                     b_array_1 = self._data['b_array_1'],
+                     w_array_2 = self._data['w_array_2'],
+                     b_array_2 = self._data['b_array_2'],
+                     x_max = self._data['x_max'],
+                     x_min = self._data['x_min'],
+                     num_labels = self._data['num_labels'],
+                     num_features = self._data['num_features'],
+                     learning_rate = self._data['learning_rate'],
+                     num_neurons = self._data['num_neurons'],
+                     num_steps = self._data['num_steps'],
+                     batch_size = self._data['batch_size'],
+                     labels = self._data['labels'],
+                     training_loss = self.training_loss,
+                     validation_loss = self.validation_loss)
+        else:
+            with open(outfile, 'wb') as f:
+                pickle.dump(self, f)
+                
     @classmethod
-    def read(cls,infile):
+    def load(cls,infile):
         """ Read the model from a file."""
-        temp = np.load(infile)
-        model_data = {}
-        for f in temp.files:
-            model_data[f] = temp[f]
-        mout = Emulator(model_data['num_labels'], model_data['num_neurons'], model_data['num_features'])
-        mout.trained = True
-        mout._data = model_data
-        return mout
-        
+        # Try pickle first
+        try:
+            with open(mfile, 'rb') as f: 
+                data = pickle.load(f)
+            return data
+        # Try npz next
+        except:
+            temp = np.load(infile)
+            model_data = {}
+            for f in temp.files:
+                model_data[f] = temp[f]
+            mout = Emulator(model_data['num_labels'], model_data['num_neurons'], model_data['num_features'])
+            mout.trained = True
+            mout._data = model_data
+            # Create the model state dictionary
+            state_dict = OrderedDict()
+            dtype = torch.FloatTensor            
+            state_dict['features.0.weight'] = Variable(torch.from_numpy(model_data['w_array_0'])).type(dtype)
+            state_dict['features.0.bias'] = Variable(torch.from_numpy(model_data['b_array_0'])).type(dtype)
+            state_dict['features.2.weight'] = Variable(torch.from_numpy(model_data['w_array_1'])).type(dtype)
+            state_dict['features.2.bias'] = Variable(torch.from_numpy(model_data['b_array_1'])).type(dtype)
+            state_dict['features.4.weight'] = Variable(torch.from_numpy(model_data['w_array_2'])).type(dtype)
+            state_dict['features.4.bias'] = Variable(torch.from_numpy(model_data['b_array_2'])).type(dtype)            
+            mout.model.load_state_dict(state_dict)
+            return mout
+
+
+    
     #===================================================================================================
     # train neural networks
     def train(self,training_labels, training_data, validation_labels=None, validation_data=None,
@@ -183,18 +213,18 @@ class Emulator(object):
             dtype = torch.FloatTensor
             torch.set_default_tensor_type('torch.FloatTensor')   
 
-        # Default label names
-        if label_names is None:
-            label_names = []
-            for i in range(len(num_labels)):
-                label_names.append('label'+str(i+1))
-
         # Shuffle the data
         ndata,num_features = training_data.shape
         ndata2,num_labels = training_labels.shape
         ind = np.arange(ndata)
         if shuffle:
             np.random.shuffle(ind)  # shuffle in place
+
+        # Default label names
+        if label_names is None:
+            label_names = []
+            for i in range(num_labels):
+                label_names.append('label'+str(i+1))
             
         # Validation split
         if validation_labels is None and validation_data is None and validation_split is not None:
@@ -312,6 +342,8 @@ class Emulator(object):
                     for param in model.parameters():
                         model_numpy.append(param.data.cpu().numpy())
 
+                    # can also use model.state_dict()
+                        
                     # extract the weights and biases
                     model_data = {}
                     model_data['w_array_0'] = model_numpy[0]
