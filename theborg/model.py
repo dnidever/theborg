@@ -11,19 +11,11 @@ from collections import OrderedDict
 from torch.autograd import Variable
 from . import radam
 
-def leaky_relu(z):
-    '''
-    This is the activation function used by default in all our neural networks.
-    '''
 
-    return z*(z > 0) + 0.01*z*(z < 0)
-
-
-#===================================================================================================
 # simple multi-layer perceptron model
-class EmulatorModel(torch.nn.Module):
+class SimpleModel(torch.nn.Module):
     def __init__(self, dim_in, num_neurons, num_features):
-        super(EmulatorModel, self).__init__()
+        super(SimpleModel, self).__init__()
         self.features = torch.nn.Sequential(
             torch.nn.Linear(dim_in, num_neurons),
             torch.nn.LeakyReLU(),
@@ -36,15 +28,28 @@ class EmulatorModel(torch.nn.Module):
         return self.features(x)
 
 class Model(object):
-    def __init__(self, dim_in=4, num_neurons=100, num_features=500, training_data=None, training_labels=None):
-        self.model = EmulatorModel(dim_in, num_neurons, num_features)
-        self.trained = False
+    def __init__(self, dim_in=4, num_neurons=100, num_features=500, training_data=None, training_labels=None,
+                 learning_rate=1e-3,batch_size=100,label_names=None):
+        self.model = SimpleModel(dim_in, num_neurons, num_features)
+        self.xmin = None
+        self.xmax = None
         self.num_labels = None
         self.num_features = None
+        self.learning_rate = learning_rate
+        self.batch_size = batch_size
+        self.trained = False
+        self.label_names = label_names
         self.training_loss = []
         self.validation_loss = []
         self.training_data = training_data
         self.training_labels = training_labels
+
+    def scaled_labels(self,labels):
+        """ Scale the labels."""
+        if self.xmin is None or self.xmax is None:
+            raise ValueError('No label scaling informationl')
+        slabels = (labels-self.xmin)/(self.xmax-self.xmin) - 0.5   # scale the labels
+        return slabels
         
     def __call__(self,labels):
         """ Return the model value."""
@@ -54,42 +59,36 @@ class Model(object):
             return None
         
         ## Input labels should be unscaled
-        data = self._data
+        #data = self._data
         ## assuming your NN has two hidden layers.
-        x_min, x_max = data['x_min'],data['x_max']
-        scaled_labels = (labels-x_min)/(x_max-x_min) - 0.5   # scale the labels
-
+        #x_min, x_max = data['x_min'],data['x_max']
+        #scaled_labels = (labels-x_min)/(x_max-x_min) - 0.5   # scale the labels
+        scaled_labels = self.scaled_labels(labels)
+        
         # Use model.forward()
         #  need to input torch tensor variable values
         dtype = torch.FloatTensor
         x = Variable(torch.from_numpy(np.array(scaled_labels))).type(dtype)  
         out = self.model.forward(x)
         out = out.detach().numpy()
-        
         return out
 
     def save(self,outfile,npz=False):
         """ Write the model to a file."""
         # save parameters and remember how we scaled the labels
         if npz:
-            np.savez(outfile,
-                     w_array_0 = self._data['w_array_0'],
-                     b_array_0 = self._data['b_array_0'],
-                     w_array_1 = self._data['w_array_1'],
-                     b_array_1 = self._data['b_array_1'],
-                     w_array_2 = self._data['w_array_2'],
-                     b_array_2 = self._data['b_array_2'],
-                     x_max = self._data['x_max'],
-                     x_min = self._data['x_min'],
-                     num_labels = self._data['num_labels'],
-                     num_features = self._data['num_features'],
-                     learning_rate = self._data['learning_rate'],
-                     num_neurons = self._data['num_neurons'],
-                     num_steps = self._data['num_steps'],
-                     batch_size = self._data['batch_size'],
-                     labels = self._data['labels'],
-                     training_loss = self.training_loss,
-                     validation_loss = self.validation_loss)
+            outdict = np.copy(self.model.state_dict())
+            outdict['xmin'] = self.xmin
+            outdict['xmax'] = self.xmax
+            outdict['num_labels'] = self.num_labels
+            outdict['num_features'] = self.num_features
+            outdict['learning_rate'] = self.learning_rate
+            outdict['batch_size'] = self.batch_size
+            outdict['labels'] = self.labels            
+            outdict['training_loss'] = self.training_loss
+            outdict['validation_loss'] = self.validation_loss
+            outdict['training_labels'] = self.training_labels
+            np.savez(outfile,outdict)
         else:
             with open(outfile, 'wb') as f:
                 pickle.dump(self, f)
@@ -107,14 +106,23 @@ class Model(object):
             temp = np.load(infile)
             model_data = {}
             for f in temp.files:
-                model_data[f] = temp[f]
-            mout = Emulator(model_data['num_labels'], model_data['num_neurons'], model_data['num_features'])
+                try:
+                    model_data[f] = temp[f]
+                except:
+                    model_data[f] = None
+            mout = Model(model_data['num_labels'], model_data['num_neurons'], model_data['num_features'])
+            mout.xmin = model_data['xmin']
+            mout.xmax = model_data['xmax']            
+            mout.num_labels = model_data['num_labels']
+            mout.num_features = model_data['num_features']
+            mout.learning_rate = model_data['learning_rate']
+            mout.batch_size = model_data['batch_size']
             mout.trained = True
-            mout._data = model_data
+            mout.label_names = model_data['label_names']
             mout.training_loss = model_data['training_loss']
             mout.validation_loss = model_data['validation_loss']
-            mout.num_labels = model_data['num_labels']
-            mout.num_features = model_data['num_features']            
+            mout.training_labels = model_data['training_labels']
+
             # Create the model state dictionary
             state_dict = OrderedDict()
             dtype = torch.FloatTensor            
@@ -126,8 +134,6 @@ class Model(object):
             state_dict['features.4.bias'] = Variable(torch.from_numpy(model_data['b_array_2'])).type(dtype)            
             mout.model.load_state_dict(state_dict)
             return mout
-
-
     
     #===================================================================================================
     # train neural networks
@@ -221,18 +227,25 @@ class Model(object):
             
         # Re-initialize the model and trained data and history
         self.model = EmulatorModel(num_labels, num_neurons, num_features)
-        self._data = None
-        self.training_loss = []
-        self.validation_loss = []
-        self.trained = False
         self.num_labels = num_labels
         self.num_features = num_features
-        
+        self.learning_rate = learning_rate
+        self.batch_size = batch_size
+        self.label_names = label_names
+        self.training_loss = []
+        self.validation_loss = []
+        self.training_labels = training_labels[ind,:]
+        self.trained = False
+
         # scale the labels, optimizing neural networks is easier if the labels are more normalized
-        x_max = np.max(training_labels[ind,:], axis = 0)
-        x_min = np.min(training_labels[ind,:], axis = 0)
-        x = (training_labels[ind,:] - x_min)/(x_max - x_min) - 0.5
-        x_valid = (validation_labels-x_min)/(x_max-x_min) - 0.5
+        xmax = np.max(training_labels[ind,:], axis = 0)
+        xmin = np.min(training_labels[ind,:], axis = 0)
+        self.xmin = xmin
+        self.xmax = xmax
+        x = self.scaled_labels(training_labels[ind,:])
+        x_valid = self.scaled_labels(validation_labels)
+        #x = (training_labels[ind,:] - xmin)/(xmax - xmin) - 0.5
+        #x_valid = (validation_labels-xmin)/(xmax-xmin) - 0.5
 
         # dimension of the input
         dim_in = x.shape[1]
@@ -325,27 +338,27 @@ class Model(object):
                     # can also use model.state_dict()
                         
                     # extract the weights and biases
-                    model_data = {}
-                    model_data['w_array_0'] = model_numpy[0]
-                    model_data['b_array_0'] = model_numpy[1]
-                    model_data['w_array_1'] = model_numpy[2]
-                    model_data['b_array_1'] = model_numpy[3]
-                    model_data['w_array_2'] = model_numpy[4]
-                    model_data['b_array_2'] = model_numpy[5]
-                    model_data['x_min'] = x_min
-                    model_data['x_max'] = x_max
-                    model_data['num_labels'] = num_labels
-                    model_data['num_features'] = num_features                    
-                    model_data['learning_rate'] = learning_rate
-                    model_data['num_neurons'] = num_neurons
-                    model_data['num_steps'] = num_steps
-                    model_data['batch_size'] = batch_size
-                    model_data['labels'] = label_names
-                    model_data['niter'] = e
-                    model_data['training_loss'] = loss_data
-                    model_data['validation_loss'] = loss_valid_data
+                    #model_data = {}
+                    #model_data['w_array_0'] = model_numpy[0]
+                    #model_data['b_array_0'] = model_numpy[1]
+                    #model_data['w_array_1'] = model_numpy[2]
+                    #model_data['b_array_1'] = model_numpy[3]
+                    #model_data['w_array_2'] = model_numpy[4]
+                    #model_data['b_array_2'] = model_numpy[5]
+                    #model_data['x_min'] = x_min
+                    #model_data['x_max'] = x_max
+                    #model_data['num_labels'] = num_labels
+                    #model_data['num_features'] = num_features                    
+                    #model_data['learning_rate'] = learning_rate
+                    #model_data['num_neurons'] = num_neurons
+                    #model_data['num_steps'] = num_steps
+                    #model_data['batch_size'] = batch_size
+                    #model_data['labels'] = label_names
+                    #model_data['niter'] = e
+                    #model_data['training_loss'] = loss_data
+                    #model_data['validation_loss'] = loss_valid_data
 
-                    self._data = model_data
+                    #self._data = model_data
                     self.training_loss = training_loss                    
                     self.validation_loss = validation_loss
 
@@ -353,27 +366,27 @@ class Model(object):
         #--------------------------------------------------------------------------------------------
         # Final values
         # extract the weights and biases
-        model_data = {}
-        model_data['w_array_0'] = model_numpy[0]
-        model_data['b_array_0'] = model_numpy[1]
-        model_data['w_array_1'] = model_numpy[2]
-        model_data['b_array_1'] = model_numpy[3]
-        model_data['w_array_2'] = model_numpy[4]
-        model_data['b_array_2'] = model_numpy[5]
-        model_data['x_min'] = x_min
-        model_data['x_max'] = x_max
-        model_data['num_labels'] = num_labels
-        model_data['num_features'] = num_features                    
-        model_data['learning_rate'] = learning_rate
-        model_data['num_neurons'] = num_neurons
-        model_data['num_steps'] = num_steps
-        model_data['batch_size'] = batch_size
-        model_data['labels'] = label_names
-        model_data['niter'] = e
-        model_data['training_loss'] = loss_data
-        model_data['validation_loss'] = loss_valid_data
+        #model_data = {}
+        #model_data['w_array_0'] = model_numpy[0]
+        #model_data['b_array_0'] = model_numpy[1]
+        #model_data['w_array_1'] = model_numpy[2]
+        #model_data['b_array_1'] = model_numpy[3]
+        #model_data['w_array_2'] = model_numpy[4]
+        #model_data['b_array_2'] = model_numpy[5]
+        #model_data['x_min'] = x_min
+        #model_data['x_max'] = x_max
+        #model_data['num_labels'] = num_labels
+        #model_data['num_features'] = num_features                    
+        #model_data['learning_rate'] = learning_rate
+        #model_data['num_neurons'] = num_neurons
+        #model_data['num_steps'] = num_steps
+        #model_data['batch_size'] = batch_size
+        #model_data['labels'] = label_names
+        #model_data['niter'] = e
+        #model_data['training_loss'] = loss_data
+        #model_data['validation_loss'] = loss_valid_data
 
-        self._data = model_data
+        #self._data = model_data
         self.training_loss = training_loss                    
         self.validation_loss = validation_loss
         self.trained = True
