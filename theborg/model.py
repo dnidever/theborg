@@ -34,7 +34,15 @@ class Model(object):
         self.xmin = None
         self.xmax = None
         self.num_labels = None
+        if training_labels is not None:
+            if np.array(training_labels).ndim != 2:
+                raise ValueError('training_labels must be 2D with dimensions [Nsamples,Nlabels]')
+            self.num_labels = np.array(training_labels).shape[1]
         self.num_features = None
+        if training_data is not None:
+            if np.array(training_data).ndim != 2:
+                raise ValueError('training_data must be 2D with dimensions [Nsamples,Nfeatures]')            
+            self.num_features = np.array(training_data).shape[1]
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.trained = False
@@ -137,57 +145,80 @@ class Model(object):
     
     #===================================================================================================
     # train neural networks
-    def train(self,training_labels, training_data, validation_labels=None, validation_data=None,
+    def train(self,training_labels=None, training_data=None, validation_labels=None, validation_data=None,
               validation_split=0.2, num_neurons=None, num_steps=1e4, learning_rate=1e-4, batch_size=200,
-              num_features=None, cuda=False, name=None,shuffle=True,
-              label_names=None):
+              cuda=False, shuffle=True, label_names=None):
 
         '''
-        Training a neural net to emulate spectral models
+        Training a neural net to emulate data.
 
-        training_labels has the dimension of [# training spectra, # stellar labels]
-        training_data has the dimension of [# training spectra, # wavelength pixels]
-        
         The validation set is used to independently evaluate how well the neural net
         is emulating the spectra. If the neural network overfits the spectral variation, while
         the loss will continue to improve for the training set, but the validation
-        set should show a worsen loss.
+        set should show a worse loss.
 
         The training is designed in a way that it always returns the best neural net
         before the network starts to overfit (gauged by the validation set).
 
-        num_steps = how many steps to train until convergence.
-        1e4 is good for the specific NN architecture and learning I used by default.
-        Bigger networks will take more steps to converge, and decreasing the learning rate
-        will also change this. You can get a sense of how many steps are needed for a new
-        NN architecture by plotting the loss evaluated on both the training set and
-        a validation set as a function of step number. It should plateau once the NN
-        has converged.
+        Parameters
+        ----------
+        training_labels : numpy array
+           The labels for the training set.  It should have dimensions of [# training data, # labels]
+        training_data : numpy array
+           The data for the training set.  It should have dimensions of [# training data, # features].
+        validation_labels : numpy array, optional
+           Validation sample labels.  It should have dimensions of [# validataion data, # labels].
+        validation_data : numpy array, optional
+           Validation sample data.  It should have dimensions of [# validataion data, # features].
+        validation_split : float, optional
+           You can use this to split off some of the training set itself as the validation set.
+            Default is 0.20 or 20%.
+        num_neurons : int, optional
+           Default is 2*num_features.
+        num_steps : int, optional
+           How many steps to train until convergence.
+            1e4 is good for the specific NN architecture and learning I used by default.
+            Bigger networks will take more steps to converge, and decreasing the learning rate
+            will also change this. You can get a sense of how many steps are needed for a new
+            NN architecture by plotting the loss evaluated on both the training set and
+            a validation set as a function of step number. It should plateau once the NN
+            has converged.  Default is 10000.
+        learning_rate : float, optional
+           Step size to take for gradient descent.
+            This is also tunable, but 1e-4 seems to work well for most use cases. Again,
+            diagnose with a validation set if you change this.  Default is 1e-3.
+        batch_size : int, optional
+           The batch size for training the neural networks during the stochastic
+             gradient descent. A larger batch_size reduces stochasticity, but it might also
+             risk of stucking in local minima. Default is 200.
+        cuda : boolean, optional
+           Use CUDA on a GPU.  Default is False.
+        shuffle : boolean, optional
+           Randomize/shuffle the data.  Default is to shuffle the data.
+        label_names : list, optional
+           List of names of labels.
 
-        learning_rate = step size to take for gradient descent
-        This is also tunable, but 1e-4 seems to work well for most use cases. Again,
-        diagnose with a validation set if you change this.
+        Results
+        -------
+        The model is trained and can be used to emulate the data.
 
-        num_features is the number of features before the deconvolutional layers; it only
-        applies if ResNet is used. For the simple multi-layer perceptron model, this parameter
-        is not used. We truncate the predicted model if the output number of pixels is
-        larger than what is needed. In the current default model, the output is ~8500 pixels
-        in the case where the number of pixels is > 8500, increase the number of features, and
-        tweak the ResNet model accordingly
+        Example
+        -------
 
-        batch_size = the batch size for training the neural networks during the stochastic
-        gradient descent. A larger batch_size reduces stochasticity, but it might also
-        risk of stucking in local minima
+        model.train(training_data=data,training_labels=labels,num_steps=2000)
         
         '''
 
-        # Output names
-        if name is None:
-            modelfile = "NN_normalized_data.npz"
-            lossfile = "trained_loss.npz"
-        else:
-            modelfile = "NN_normalized_data_"+str(name)+".npz"
-            lossfile = "trained_loss_"+str(name)+".npz"
+        # No training data
+        if training_data is None and training_labels is None and \
+           self.training_data is None and self.training_labels is None:
+            raise ValueError('Need training_data and training_labels to train the model')
+
+        # Training data to use
+        if training_data is None:
+            training_data = self.training_data
+        if training_labels is None:
+            training_labels = self.training_labels
         
         # run on cuda
         if cuda:
@@ -226,9 +257,11 @@ class Model(object):
             print('num_neurons not input.  Using 2*Nfeatures = ',num_neurons)
             
         # Re-initialize the model and trained data and history
-        self.model = EmulatorModel(num_labels, num_neurons, num_features)
+        self.model = self.model.__class__(num_labels, num_neurons, num_features)
+        #self.model = EmulatorModel(num_labels, num_neurons, num_features)
         self.num_labels = num_labels
         self.num_features = num_features
+        self.num_neurons = num_neurons
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.label_names = label_names
@@ -242,10 +275,11 @@ class Model(object):
         xmin = np.min(training_labels[ind,:], axis = 0)
         self.xmin = xmin
         self.xmax = xmax
+        bd, = np.where(self.xmax-self.xmin==0.0)
+        if len(bd)>0:
+            raise ValueError('Label '+','.join(bd)+' has no variation')
         x = self.scaled_labels(training_labels[ind,:])
         x_valid = self.scaled_labels(validation_labels)
-        #x = (training_labels[ind,:] - xmin)/(xmax - xmin) - 0.5
-        #x_valid = (validation_labels-xmin)/(xmax-xmin) - 0.5
 
         # dimension of the input
         dim_in = x.shape[1]
