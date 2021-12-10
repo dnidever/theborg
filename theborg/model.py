@@ -51,7 +51,8 @@ class Model(object):
         self.validation_loss = []
         self.training_data = training_data
         self.training_labels = training_labels
-
+        self._best_state_dict = None
+        
     def scaled_labels(self,labels):
         """ Scale the labels."""
         if self.xmin is None or self.xmax is None:
@@ -193,7 +194,7 @@ class Model(object):
         learning_rate : float, optional
            Step size to take for gradient descent.
             This is also tunable, but 1e-4 seems to work well for most use cases. Again,
-            diagnose with a validation set if you change this.  Default is 1e-3.
+            diagnose with a validation set if you change this.  Default is 1e-4.
         batch_size : int, optional
            The batch size for training the neural networks during the stochastic
              gradient descent. A larger batch_size reduces stochasticity, but it might also
@@ -284,7 +285,7 @@ class Model(object):
         self.xmax = xmax
         bd, = np.where(self.xmax-self.xmin==0.0)
         if len(bd)>0:
-            raise ValueError('Label '+','.join(bd)+' has no variation')
+            raise ValueError('Label '+str(bd)+' has no variation')
         x = self.scaled_labels(training_labels[ind,:])
         x_valid = self.scaled_labels(validation_labels)
 
@@ -336,12 +337,15 @@ class Model(object):
             for i in range(nbatches):
                 idx = perm[i * batch_size : (i+1) * batch_size]
                 y_pred = model(x[idx])
-
                 loss = loss_fn(y_pred, y[idx])*1e4
                 optimizer.zero_grad()
                 loss.backward(retain_graph=False)
                 optimizer.step()
 
+            # First time
+            if self._best_state_dict is None:
+                self._best_state_dict = model.state_dict()
+                
             #-------------------------------------------------------------------------------------------------------
             # evaluate validation loss
             if e % 100 == 0:
@@ -372,62 +376,13 @@ class Model(object):
                 # record the weights and biases if the validation loss improves
                 if loss_valid_data < current_loss:
                     current_loss = loss_valid_data
-                    model_numpy = []
-                    for param in model.parameters():
-                        model_numpy.append(param.data.cpu().numpy())
-
-                    # can also use model.state_dict()
-                        
-                    # extract the weights and biases
-                    #model_data = {}
-                    #model_data['w_array_0'] = model_numpy[0]
-                    #model_data['b_array_0'] = model_numpy[1]
-                    #model_data['w_array_1'] = model_numpy[2]
-                    #model_data['b_array_1'] = model_numpy[3]
-                    #model_data['w_array_2'] = model_numpy[4]
-                    #model_data['b_array_2'] = model_numpy[5]
-                    #model_data['x_min'] = x_min
-                    #model_data['x_max'] = x_max
-                    #model_data['num_labels'] = num_labels
-                    #model_data['num_features'] = num_features                    
-                    #model_data['learning_rate'] = learning_rate
-                    #model_data['num_neurons'] = num_neurons
-                    #model_data['num_steps'] = num_steps
-                    #model_data['batch_size'] = batch_size
-                    #model_data['labels'] = label_names
-                    #model_data['niter'] = e
-                    #model_data['training_loss'] = loss_data
-                    #model_data['validation_loss'] = loss_valid_data
-
-                    #self._data = model_data
+                    self._best_state_dict = model.state_dict()
                     self.training_loss = training_loss                    
                     self.validation_loss = validation_loss
 
-
         #--------------------------------------------------------------------------------------------
         # Final values
-        # extract the weights and biases
-        #model_data = {}
-        #model_data['w_array_0'] = model_numpy[0]
-        #model_data['b_array_0'] = model_numpy[1]
-        #model_data['w_array_1'] = model_numpy[2]
-        #model_data['b_array_1'] = model_numpy[3]
-        #model_data['w_array_2'] = model_numpy[4]
-        #model_data['b_array_2'] = model_numpy[5]
-        #model_data['x_min'] = x_min
-        #model_data['x_max'] = x_max
-        #model_data['num_labels'] = num_labels
-        #model_data['num_features'] = num_features                    
-        #model_data['learning_rate'] = learning_rate
-        #model_data['num_neurons'] = num_neurons
-        #model_data['num_steps'] = num_steps
-        #model_data['batch_size'] = batch_size
-        #model_data['labels'] = label_names
-        #model_data['niter'] = e
-        #model_data['training_loss'] = loss_data
-        #model_data['validation_loss'] = loss_valid_data
-
-        #self._data = model_data
+        self.model.load_state_dict(self._best_state_dict)  # save final best values        
         self.training_loss = training_loss                    
         self.validation_loss = validation_loss
         self.trained = True
