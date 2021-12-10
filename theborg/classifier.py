@@ -332,7 +332,7 @@ class ClassifierModel(torch.nn.Module):
             torch.nn.LeakyReLU(),
             torch.nn.Linear(num_neurons, num_labels),
             torch.nn.Sigmoid()
-
+        )
     def forward(self, x):
         return self.features(x)
 

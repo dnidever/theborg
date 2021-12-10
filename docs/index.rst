@@ -9,7 +9,7 @@ The Borg
 
 Introduction
 ============
-|theborg| is a package up helpful routines for training	artificial neural networks.
+|theborg| is a package of helpful routines for training artificial neural networks for various purposes.
 
 
 .. toctree::
@@ -19,11 +19,6 @@ Introduction
    gettingstarted
    modules
    
-
-Description
-===========
-|theborg| has a number of helpful routines for training artificial neural networks.
-
 
 Examples
 ========

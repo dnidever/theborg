@@ -3,10 +3,10 @@ Installation
 ************
 
 
-Installing The Borg
-===================
+Installing |theborg|
+====================
 
-The easiest way to install theborg is with PyPi.  Note that you need to install "theborg".
+The easiest way to install |theborg| is with PyPi.
 
 .. code-block:: bash
 
