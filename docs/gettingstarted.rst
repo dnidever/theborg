@@ -63,8 +63,8 @@ Now you can save the model to a file.
 
 	cmodel.save('my_classifier.pkl')
 
-There are two classifiers.  A simple classifier :class:`~theborg.classifier.Classifer` using a serial model, and
-a classifier using convolutional layers :class:`~theborg.classifier.CNNClassifer`.
+There are two classifiers.  A simple classifier :class:`~theborg.classifier.Classifier` using a serial model, and
+a classifier using convolutional layers :class:`~theborg.classifier.CNNClassifier`.
 	
 	
 Emulator
