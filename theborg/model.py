@@ -65,13 +65,20 @@ class Model(object):
         if self.trained==False:
             print('Model is not trained yet')
             return None
+
+        if len(labels) != self.num_labels:
+            raise ValueError(str(len(labels))+' input and expected '+str(self.num_labels))
         
         ## Input labels should be unscaled
-        #data = self._data
-        ## assuming your NN has two hidden layers.
-        #x_min, x_max = data['x_min'],data['x_max']
-        #scaled_labels = (labels-x_min)/(x_max-x_min) - 0.5   # scale the labels
         scaled_labels = self.scaled_labels(labels)
+
+        # Check that the input labels are inside the trained parameters space
+        for i in range(self.num_labels):
+            inside = (labels[i]>=self.xmin[i]) & (labels[i]<=self.xmax[i])
+            if inside is False:
+                if not inside:
+                    raise ValueError('Input labels are outside the trained parameter space. Label %d = %.3f outside [%.3f to $.3f]' %
+                                     (i,labels[i],self.xmin[i],self.xmax[i]))
         
         # Use model.forward()
         #  need to input torch tensor variable values
@@ -106,7 +113,7 @@ class Model(object):
         """ Read the model from a file."""
         # Try pickle first
         try:
-            with open(mfile, 'rb') as f: 
+            with open(infile, 'rb') as f: 
                 data = pickle.load(f)
             return data
         # Try npz next
