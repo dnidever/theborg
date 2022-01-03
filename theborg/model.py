@@ -29,8 +29,11 @@ class SimpleModel(torch.nn.Module):
 
 class Model(object):
     def __init__(self, dim_in=4, num_neurons=100, num_features=500, training_data=None, training_labels=None,
-                 learning_rate=1e-3,batch_size=100,label_names=None):
+                 learning_rate=1e-4,batch_size=200,label_names=None):
         self.model = SimpleModel(dim_in, num_neurons, num_features)
+        self.dim_in = dim_in
+        self.num_neurons = num_neurons
+        self.num_features = num_features
         self.xmin = None
         self.xmax = None
         self.num_labels = None
@@ -154,7 +157,7 @@ class Model(object):
     #===================================================================================================
     # train neural networks
     def train(self,training_labels=None, training_data=None, validation_labels=None, validation_data=None,
-              validation_split=0.2, num_neurons=None, num_steps=1e4, learning_rate=1e-4, batch_size=200,
+              validation_split=0.2, num_neurons=None, num_steps=1e4, learning_rate=None, batch_size=None,
               cuda=False, shuffle=True, label_names=None):
 
         '''
@@ -248,6 +251,21 @@ class Model(object):
             label_names = []
             for i in range(num_labels):
                 label_names.append('label'+str(i+1))
+
+        # Default values
+        if num_neurons is None and self.num_neurons is not None:
+            num_neurons = self.num_neurons
+        if num_neurons is None and self.num_neurons is None:
+            num_neurons = 2*num_features
+            print('num_neurons not input.  Using 2*Nfeatures = ',num_neurons)
+        if batch_size is None and self.batch_size is not None:
+            batch_size = self.batch_size
+        if batch_size is None:
+            batch_size = 200
+        if learning_rate is None and self.learning_rate is not None:
+            learning_rate = self.learning_rate
+        if learning_rate is None:
+            learning_rate = 1e-4
             
         # Validation split
         if validation_labels is None and validation_data is None and validation_split is not None:
@@ -259,11 +277,6 @@ class Model(object):
             validation_data = training_data[vind,:] 
             validation_labels = training_labels[vind,:]
 
-        # Default num_neurons
-        if num_neurons is None:
-            num_neurons = 2*num_features
-            print('num_neurons not input.  Using 2*Nfeatures = ',num_neurons)
-            
         # Re-initialize the model and trained data and history
         self.model = self.model.__class__(num_labels, num_neurons, num_features)
         #self.model = EmulatorModel(num_labels, num_neurons, num_features)
@@ -324,6 +337,11 @@ class Model(object):
         training_loss = []
         validation_loss = []
 
+        if nbatches==0:
+            raise ValueError('nbatches is zero.  Reduce batch size')
+        if nbatches_valid==0:
+            raise ValueError('nbatches_validation is zero.  Reduce batch size')        
+        
         #-------------------------------------------------------------------------------------------------------
         # train the network
         for e in range(int(num_steps)):
