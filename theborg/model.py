@@ -242,7 +242,12 @@ class Model(object):
             training_data = self.training_data
         if training_labels is None:
             training_labels = self.training_labels
-        
+        # Save the training data
+        if self.training_data is None:
+            self.training_data = training_data
+        if self.training_labels is None
+            self.training_labels = training_labels        
+            
         # run on cuda
         if cuda:
             dtype = torch.cuda.FloatTensor
