@@ -8,6 +8,7 @@ import torch
 import time
 import dill as pickle
 from collections import OrderedDict
+from scipy.spatial import Delaunay,ConvexHull
 from torch.autograd import Variable
 from . import radam
 
@@ -55,6 +56,7 @@ class Model(object):
         self.training_data = training_data
         self.training_labels = training_labels
         self._best_state_dict = None
+        self._hull = None
         
     def scaled_labels(self,labels):
         """ Scale the labels."""
@@ -62,7 +64,17 @@ class Model(object):
             raise ValueError('No label scaling informationl')
         slabels = (labels-self.xmin)/(self.xmax-self.xmin) - 0.5   # scale the labels
         return slabels
-        
+
+    def in_hull(self,labels):
+        """ Check if labels are inside the convex hull of the training set points."""
+        if self.trained==False:
+            raise ValueError('Model not trained')
+        if self._hull is None:
+            chull = ConvexHull(self.training_data)
+            hull = Delaunay(chull.points[chull.vertices,:])
+            self._hull = hull
+        return self._hull.find_simplex(labels) >= 0            
+    
     def __call__(self,labels):
         """ Return the model value."""
 
@@ -288,7 +300,8 @@ class Model(object):
         self.label_names = label_names
         self.training_loss = []
         self.validation_loss = []
-        self.training_labels = training_labels[ind,:]
+        self.training_labels = training_data
+        self.training_labels = training_labels  #[ind,:]        
         self.trained = False
 
         # scale the labels, optimizing neural networks is easier if the labels are more normalized
