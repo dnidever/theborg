@@ -70,7 +70,7 @@ class Model(object):
         if self.trained==False:
             raise ValueError('Model not trained')
         if self._hull is None:
-            chull = ConvexHull(self.training_data)
+            chull = ConvexHull(self.training_labels)
             hull = Delaunay(chull.points[chull.vertices,:])
             self._hull = hull
         return self._hull.find_simplex(labels) >= 0            
