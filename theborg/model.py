@@ -245,7 +245,7 @@ class Model(object):
         # Save the training data
         if self.training_data is None:
             self.training_data = training_data
-        if self.training_labels is None
+        if self.training_labels is None:
             self.training_labels = training_labels        
             
         # run on cuda
