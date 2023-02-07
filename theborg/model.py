@@ -10,6 +10,7 @@ import dill as pickle
 from collections import OrderedDict
 from scipy.spatial import Delaunay,ConvexHull
 from torch.autograd import Variable
+from dlnpyutils import utils as dln
 from . import radam
 
 
@@ -137,10 +138,12 @@ class Model(object):
             inside1 = (labels[i]>=self.xmin[i]) and (labels[i]<=self.xmax[i])
             if inside1 == False:
                 clip_labels[i] = np.minimum(np.maximum(labels[i],self.xmin[i]),self.xmax[i])
+                error = 'Input labels are outside the trained parameter space.'
+                error += ' Label {:d} = {:.3f} outside [{:.3f} to {:.3f}]'.format(i,labels[i],self.xmin[i],self.xmax[i])
             inside = inside and inside1
             
         # Handle cases outside the boundary
-        if inside is False:
+        if inside==False:
             # Clip the labels to the values at the boundary
             if border=='clip':
                 # Use the clip labels
@@ -153,8 +156,7 @@ class Model(object):
                 return float(border)
             # Raise Exception
             else:
-                raise ValueError('Input labels are outside the trained parameter space. Label %d = %.3f outside [%.3f to $.3f]' %
-                                 (i,labels[i],self.xmin[i],self.xmax[i]))
+                raise ValueError(error)
             
         # Use model.forward()
         #  need to input torch tensor variable values
