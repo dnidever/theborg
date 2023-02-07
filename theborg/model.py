@@ -57,6 +57,12 @@ class Model(object):
         self.training_labels = training_labels
         self._best_state_dict = None
         self._hull = None
+
+    # add __repr__
+    # give num_labels, num_neurons, num_features
+    # label_names
+    # size of training set
+    # maybe the range of the labels?
         
     def scaled_labels(self,labels):
         """ Scale the labels."""
@@ -108,18 +114,19 @@ class Model(object):
         """ Write the model to a file."""
         # save parameters and remember how we scaled the labels
         if npz:
-            outdict = np.copy(self.model.state_dict())
+            outdict = self.model.state_dict().copy()
             outdict['xmin'] = self.xmin
             outdict['xmax'] = self.xmax
             outdict['num_labels'] = self.num_labels
-            outdict['num_features'] = self.num_features
+            outdict['num_neurons'] = self.num_neurons
+            outdict['num_features'] = self.num_features            
             outdict['learning_rate'] = self.learning_rate
             outdict['batch_size'] = self.batch_size
-            outdict['labels'] = self.labels            
+            outdict['label_names'] = self.label_names         
             outdict['training_loss'] = self.training_loss
             outdict['validation_loss'] = self.validation_loss
             outdict['training_labels'] = self.training_labels
-            np.savez(outfile,outdict)
+            np.savez(outfile,**outdict)
         else:
             with open(outfile, 'wb') as f:
                 pickle.dump(self, f)
@@ -134,35 +141,35 @@ class Model(object):
             return data
         # Try npz next
         except:
-            temp = np.load(infile)
+            temp = np.load(infile,allow_pickle=True)
             model_data = {}
             for f in temp.files:
                 try:
                     model_data[f] = temp[f]
                 except:
                     model_data[f] = None
-            mout = Model(model_data['num_labels'], model_data['num_neurons'], model_data['num_features'])
+            mout = Model(int(model_data['num_labels']), int(model_data['num_neurons']), int(model_data['num_features']))
             mout.xmin = model_data['xmin']
             mout.xmax = model_data['xmax']            
-            mout.num_labels = model_data['num_labels']
-            mout.num_features = model_data['num_features']
-            mout.learning_rate = model_data['learning_rate']
-            mout.batch_size = model_data['batch_size']
+            mout.num_labels = int(model_data['num_labels'])
+            mout.num_features = int(model_data['num_features'])
+            mout.learning_rate = float(model_data['learning_rate'])
+            mout.batch_size = int(model_data['batch_size'])
             mout.trained = True
             mout.label_names = model_data['label_names']
-            mout.training_loss = model_data['training_loss']
-            mout.validation_loss = model_data['validation_loss']
+            mout.training_loss = float(model_data['training_loss'])
+            mout.validation_loss = float(model_data['validation_loss'])
             mout.training_labels = model_data['training_labels']
 
             # Create the model state dictionary
             state_dict = OrderedDict()
             dtype = torch.FloatTensor            
-            state_dict['features.0.weight'] = Variable(torch.from_numpy(model_data['w_array_0'])).type(dtype)
-            state_dict['features.0.bias'] = Variable(torch.from_numpy(model_data['b_array_0'])).type(dtype)
-            state_dict['features.2.weight'] = Variable(torch.from_numpy(model_data['w_array_1'])).type(dtype)
-            state_dict['features.2.bias'] = Variable(torch.from_numpy(model_data['b_array_1'])).type(dtype)
-            state_dict['features.4.weight'] = Variable(torch.from_numpy(model_data['w_array_2'])).type(dtype)
-            state_dict['features.4.bias'] = Variable(torch.from_numpy(model_data['b_array_2'])).type(dtype)            
+            state_dict['features.0.weight'] = Variable(torch.from_numpy(model_data['features.0.weight'])).type(dtype)
+            state_dict['features.0.bias'] = Variable(torch.from_numpy(model_data['features.0.bias'])).type(dtype)
+            state_dict['features.2.weight'] = Variable(torch.from_numpy(model_data['features.2.weight'])).type(dtype)
+            state_dict['features.2.bias'] = Variable(torch.from_numpy(model_data['features.2.bias'])).type(dtype)
+            state_dict['features.4.weight'] = Variable(torch.from_numpy(model_data['features.4.weight'])).type(dtype)
+            state_dict['features.4.bias'] = Variable(torch.from_numpy(model_data['features.4.bias'])).type(dtype)            
             mout.model.load_state_dict(state_dict)
             return mout
     
