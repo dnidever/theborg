@@ -58,12 +58,29 @@ class Model(object):
         self._best_state_dict = None
         self._hull = None
 
-    # add __repr__
-    # give num_labels, num_neurons, num_features
-    # label_names
-    # size of training set
-    # maybe the range of the labels?
-        
+
+
+
+    def __repr__(self):
+        """ String representation."""
+        out = self.__class__.__name__+'('
+        blocks = []
+        if hasattr(self,'num_labels') and self.num_labels is not None:
+            sout = 'Nlabels={:d}'.format(self.num_labels)
+            sout += ' ['+','.join(self.label_names)+']'
+            blocks.append(sout)            
+        # maybe the range of the labels?            
+        if hasattr(self,'num_neurons') and self.num_neurons is not None:
+            blocks.append('Nneurons={:d}'.format(self.num_neurons))
+        if hasattr(self,'num_features') and self.num_features is not None:
+            blocks.append('Nfeatures={:d}'.format(self.num_features))
+        if self.trained:
+            blocks.append('Ntraining={:d}'.format(self.training_labels.shape[0]))
+        if len(blocks)>0:
+            out += ', '.join(blocks)
+        out += ')\n'
+        return out 
+    
     def scaled_labels(self,labels):
         """ Scale the labels."""
         if self.xmin is None or self.xmax is None:
@@ -81,8 +98,27 @@ class Model(object):
             self._hull = hull
         return self._hull.find_simplex(labels) >= 0            
     
-    def __call__(self,labels):
-        """ Return the model value."""
+    def __call__(self,labels,border=None):
+        """
+        Return the model value.
+
+        Parameters
+        ----------
+        labels : list
+           The list or array of label values.
+        border: float/str, optional
+           How to handle labels outside the training set boundary:
+             -number: value to give for out of bounds, e.g. np.nan
+             -clip: limit the parameters to the values at the boundary
+             -extrapolate: extrapolate ANN outside the boundary (dangerous)
+             -None/other: raise exception (default)
+        
+        Returns
+        -------
+        out : float
+           The output model.
+
+        """
 
         if self.trained==False:
             print('Model is not trained yet')
@@ -93,15 +129,33 @@ class Model(object):
         
         ## Input labels should be unscaled
         scaled_labels = self.scaled_labels(labels)
-
-        # Check that the input labels are inside the trained parameters space
-        for i in range(self.num_labels):
-            inside = (labels[i]>=self.xmin[i]) & (labels[i]<=self.xmax[i])
-            if inside is False:
-                if not inside:
-                    raise ValueError('Input labels are outside the trained parameter space. Label %d = %.3f outside [%.3f to $.3f]' %
-                                     (i,labels[i],self.xmin[i],self.xmax[i]))
         
+        # Check that the input labels are inside the trained parameters space
+        inside = True
+        clip_labels = labels.copy()
+        for i in range(self.num_labels):
+            inside1 = (labels[i]>=self.xmin[i]) and (labels[i]<=self.xmax[i])
+            if inside1 == False:
+                clip_labels[i] = np.minimum(np.maximum(labels[i],self.xmin[i]),self.xmax[i])
+            inside = inside and inside1
+            
+        # Handle cases outside the boundary
+        if inside is False:
+            # Clip the labels to the values at the boundary
+            if border=='clip':
+                # Use the clip labels
+                scaled_labels = self.scaled_labels(clip_labels)                
+            # Allow extrapolation
+            elif border=='extrapolate':
+                pass
+            # Set out of boundary to a "bad" value, e.g., np.nan
+            elif dln.isnumber(border):
+                return float(border)
+            # Raise Exception
+            else:
+                raise ValueError('Input labels are outside the trained parameter space. Label %d = %.3f outside [%.3f to $.3f]' %
+                                 (i,labels[i],self.xmin[i],self.xmax[i]))
+            
         # Use model.forward()
         #  need to input torch tensor variable values
         dtype = torch.FloatTensor
@@ -110,6 +164,9 @@ class Model(object):
         out = out.detach().numpy()
         return out
 
+    def write(self,outfile,npz=False):
+        self.save(outfile,npz=npz)
+    
     def save(self,outfile,npz=False):
         """ Write the model to a file."""
         # save parameters and remember how we scaled the labels
@@ -130,6 +187,10 @@ class Model(object):
         else:
             with open(outfile, 'wb') as f:
                 pickle.dump(self, f)
+
+    @classmethod
+    def read(cls,infile):
+        return __class__.load(infile)
                 
     @classmethod
     def load(cls,infile):
@@ -157,8 +218,8 @@ class Model(object):
             mout.batch_size = int(model_data['batch_size'])
             mout.trained = True
             mout.label_names = model_data['label_names']
-            mout.training_loss = float(model_data['training_loss'])
-            mout.validation_loss = float(model_data['validation_loss'])
+            mout.training_loss = model_data['training_loss']
+            mout.validation_loss = model_data['validation_loss']
             mout.training_labels = model_data['training_labels']
 
             # Create the model state dictionary
