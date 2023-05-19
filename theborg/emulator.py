@@ -54,6 +54,25 @@ class EmulatorModel(torch.nn.Module):
     def forward(self, x):
         return self.features(x)
 
+# more layers
+class MultiEmulatorModel(torch.nn.Module):
+    def __init__(self, dim_in, num_neurons, num_features):
+        super(MultiEmulatorModel, self).__init__()
+        if type(num_neurons) is int:
+            num_neurons = [num_neurons]
+        flist = [torch.nn.Linear(dim_in, num_neurons[0]),torch.nn.LeakyReLU()]
+        for i in range(len(num_neurons)):
+            if i==len(num_neurons)-1:
+                flist.append(torch.nn.Linear(num_neurons[i], num_neurons[i]))
+            else:
+                flist.append(torch.nn.Linear(num_neurons[i], num_neurons[i+1]))                
+            flist.append(torch.nn.LeakyReLU())            
+        flist.append(torch.nn.Linear(num_neurons[-1], num_features))
+        self.features = torch.nn.Sequential(*flist)
+
+    def forward(self, x):
+        return self.features(x)
+    
 
 #===================================================================================================
 # simple multi-layer perceptron model
@@ -61,4 +80,7 @@ class EmulatorModel(torch.nn.Module):
 class Emulator(Model):
     def __init__(self, dim_in=4, num_neurons=100, num_features=500, **kwargs):
         super().__init__(dim_in, num_neurons, num_features, **kwargs)
-        self.model = EmulatorModel(dim_in, num_neurons, num_features)
+        if type(num_neurons) is int:
+            self.model = EmulatorModel(dim_in, num_neurons, num_features)
+        else:
+            self.model = MultiEmulatorModel(dim_in, num_neurons, num_features)            

@@ -29,13 +29,38 @@ class SimpleModel(torch.nn.Module):
     def forward(self, x):
         return self.features(x)
 
+class MultiModel(torch.nn.Module):
+    def __init__(self, dim_in, num_neurons, num_features):
+        super(MultiModel, self).__init__()
+        if type(num_neurons) is int:
+            num_neurons = [num_neurons]
+        flist = [torch.nn.Linear(dim_in, num_neurons[0]),torch.nn.LeakyReLU()]
+        for i in range(len(num_neurons)):
+            if i==len(num_neurons)-1:
+                flist.append(torch.nn.Linear(num_neurons[i], num_neurons[i]))
+            else:
+                flist.append(torch.nn.Linear(num_neurons[i], num_neurons[i+1]))                
+            flist.append(torch.nn.LeakyReLU())            
+        flist.append(torch.nn.Linear(num_neurons[-1], num_features))
+        self.features = torch.nn.Sequential(*flist)
+
+    def forward(self, x):
+        return self.features(x)
+
+    
 class Model(object):
     def __init__(self, dim_in=4, num_neurons=100, num_features=500, training_data=None, training_labels=None,
                  learning_rate=1e-4,batch_size=200,label_names=None):
-        self.model = SimpleModel(dim_in, num_neurons, num_features)
+        if type(num_neurons) is int:
+            self.model = SimpleModel(dim_in, num_neurons, num_features)
+            self.nhiddenlayers = 1
+        else:
+            self.model = MultiModel(dim_in, num_neurons, num_features)
+            self.nhiddenlayers = len(num_neurons)            
         self.dim_in = dim_in
         self.num_neurons = num_neurons
         self.num_features = num_features
+        self.nlayers = self.nhiddenlayers+2
         self.xmin = None
         self.xmax = None
         self.num_labels = None
@@ -60,8 +85,6 @@ class Model(object):
         self._hull = None
 
 
-
-
     def __repr__(self):
         """ String representation."""
         out = self.__class__.__name__+'('
@@ -72,7 +95,10 @@ class Model(object):
             blocks.append(sout)            
         # maybe the range of the labels?            
         if hasattr(self,'num_neurons') and self.num_neurons is not None:
-            blocks.append('Nneurons={:d}'.format(self.num_neurons))
+            if type(self.num_neurons) is int:
+                blocks.append('Nneurons={:d}'.format(self.num_neurons))
+            else:
+                blocks.append('Nneurons=[{:s}]'.format(','.join(np.array(self.num_neurons).astype(str))))
         if hasattr(self,'num_features') and self.num_features is not None:
             blocks.append('Nfeatures={:d}'.format(self.num_features))
         if self.trained:
@@ -83,12 +109,19 @@ class Model(object):
         return out 
     
     def scaled_labels(self,labels):
-        """ Scale the labels."""
+        """ Scale the labels from physical to -0.5 to +0.5 range for the ANN model"""
         if self.xmin is None or self.xmax is None:
-            raise ValueError('No label scaling informationl')
+            raise ValueError('No label scaling information')
         slabels = (labels-self.xmin)/(self.xmax-self.xmin) - 0.5   # scale the labels
         return slabels
 
+    def physical_labels(self,labels):
+        """ Scale the labels from the -0.5 to +0.5 range to the physical values."""
+        if self.xmin is None or self.xmax is None:
+            raise ValueError('No label scaling information')
+        plabels = (labels+0.5)*(self.xmax-self.xmin) + self.xmin  # scale the labels to physical values
+        return plabels
+    
     def in_hull(self,labels):
         """ Check if labels are inside the convex hull of the training set points."""
         if self.trained==False:
@@ -166,6 +199,22 @@ class Model(object):
         out = out.detach().numpy()
         return out
 
+    def derivative(self,labels):
+        """ Return the derivative."""
+        grad = np.float((len(self.labels),self.features),float)
+        model0 = self(labels)
+        for i in range(len(labels)):
+            labels1 = np.array(labels).copy()
+            slabels1 = self.scaled_labels(labels1)
+            step = 0.01
+            if slabels1[i]+step > 0.5:
+                step -= step
+            slabels1[i] += step
+            labels1 = self.physical_labels(slabels1)
+            model1 = self(labels1)
+            grad[i,:] = (model0-model1)/step
+        return grad
+        
     def write(self,outfile,npz=False):
         self.save(outfile,npz=npz)
     
@@ -211,7 +260,7 @@ class Model(object):
                     model_data[f] = temp[f]
                 except:
                     model_data[f] = None
-            mout = Model(int(model_data['num_labels']), int(model_data['num_neurons']), int(model_data['num_features']))
+            mout = Model(int(model_data['num_labels']), model_data['num_neurons'], int(model_data['num_features']))
             mout.xmin = model_data['xmin']
             mout.xmax = model_data['xmax']            
             mout.num_labels = int(model_data['num_labels'])
@@ -226,13 +275,18 @@ class Model(object):
 
             # Create the model state dictionary
             state_dict = OrderedDict()
-            dtype = torch.FloatTensor            
-            state_dict['features.0.weight'] = Variable(torch.from_numpy(model_data['features.0.weight'])).type(dtype)
-            state_dict['features.0.bias'] = Variable(torch.from_numpy(model_data['features.0.bias'])).type(dtype)
-            state_dict['features.2.weight'] = Variable(torch.from_numpy(model_data['features.2.weight'])).type(dtype)
-            state_dict['features.2.bias'] = Variable(torch.from_numpy(model_data['features.2.bias'])).type(dtype)
-            state_dict['features.4.weight'] = Variable(torch.from_numpy(model_data['features.4.weight'])).type(dtype)
-            state_dict['features.4.bias'] = Variable(torch.from_numpy(model_data['features.4.bias'])).type(dtype)            
+            dtype = torch.FloatTensor
+            for i in range(mout.nlayers):
+                wtname = 'features.'+str(i*2)+'.weight'
+                bname = 'features.'+str(i*2)+'.bias'
+                state_dict[wtname] = Variable(torch.from_numpy(model_data[wtname])).type(dtype)
+                state_dict[bname] = Variable(torch.from_numpy(model_data[bname])).type(dtype)                
+            #state_dict['features.0.weight'] = Variable(torch.from_numpy(model_data['features.0.weight'])).type(dtype)
+            #state_dict['features.0.bias'] = Variable(torch.from_numpy(model_data['features.0.bias'])).type(dtype)
+            #state_dict['features.2.weight'] = Variable(torch.from_numpy(model_data['features.2.weight'])).type(dtype)
+            #state_dict['features.2.bias'] = Variable(torch.from_numpy(model_data['features.2.bias'])).type(dtype)
+            #state_dict['features.4.weight'] = Variable(torch.from_numpy(model_data['features.4.weight'])).type(dtype)
+            #state_dict['features.4.bias'] = Variable(torch.from_numpy(model_data['features.4.bias'])).type(dtype)            
             mout.model.load_state_dict(state_dict)
             return mout
     
