@@ -271,8 +271,20 @@ class Model(object):
             mout.label_names = model_data['label_names']
             mout.training_loss = model_data['training_loss']
             mout.validation_loss = model_data['validation_loss']
+            try:
+                mout.validation_labels = model_data['validation_labels']
+            except:
+                pass
+            try:
+                mout.validation_data = model_data['validation_data']
+            except:
+                pass
             mout.training_labels = model_data['training_labels']
-
+            try:
+                mout.training_data = model_data['training_data']
+            except:
+                pass
+                
             # Create the model state dictionary
             state_dict = OrderedDict()
             dtype = torch.FloatTensor
