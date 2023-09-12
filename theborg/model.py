@@ -371,6 +371,7 @@ class Model(object):
             self.training_data = training_data
         if self.training_labels is None:
             self.training_labels = training_labels        
+        # Save the validation data
             
         # run on cuda
         if cuda:
@@ -429,8 +430,10 @@ class Model(object):
         self.label_names = label_names
         self.training_loss = []
         self.validation_loss = []
-        self.training_labels = training_data
-        self.training_labels = training_labels  #[ind,:]        
+        self.training_data = training_data
+        self.training_labels = training_labels  #[ind,:]
+        self.validation_data = validation_data
+        self.validation_labels = validation_labels        
         self.trained = False
 
         # scale the labels, optimizing neural networks is easier if the labels are more normalized
