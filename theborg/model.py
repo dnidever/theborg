@@ -84,6 +84,14 @@ class Model(object):
         self._best_state_dict = None
         self._hull = None
 
+    @property
+    def device(self):
+        """ Returns the device that the data is located on."""
+        key0 = list(self.model.state_dict())[0]
+        if key0 is not None:
+            return self.model.state_dict()[key0].device
+        else:
+            return None
 
     def __repr__(self):
         """ String representation."""
@@ -194,9 +202,11 @@ class Model(object):
         # Use model.forward()
         #  need to input torch tensor variable values
         dtype = torch.FloatTensor
-        x = Variable(torch.from_numpy(np.array(scaled_labels))).type(dtype)  
+        x = Variable(torch.from_numpy(np.array(scaled_labels))).type(dtype)
+        if x.device != self.device:
+            x = x.to(self.device)
         out = self.model.forward(x)
-        out = out.detach().numpy()
+        out = out.detach().to('cpu').numpy()
         return out
 
     def derivative(self,labels):
