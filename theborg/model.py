@@ -231,7 +231,8 @@ class Model(object):
         kwargs = {}
         props = ['training_labels','training_data','learning_rate','batch_size','label_names']
         for p in props:
-            kwargs[p] = getattr(self,p)
+            if hasattr(self,p):
+                kwargs[p] = getattr(self,p)
         newself = self.__class__(self.dim_in,self.num_neurons,self.num_features,**kwargs)
         props = ['validation_labels','validation_data']
         for p in props:
