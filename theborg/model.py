@@ -7,6 +7,7 @@ import os
 import torch
 import time
 import dill as pickle
+import copy
 from collections import OrderedDict
 from scipy.spatial import Delaunay,ConvexHull
 from torch.autograd import Variable
@@ -224,6 +225,20 @@ class Model(object):
             model1 = self(labels1)
             grad[i,:] = (model0-model1)/step
         return grad
+
+    def copy(self,device=None):
+        """ Make a copy."""
+        newself = self.__class__(self.dim_in,self.num_neurons,self.num_features)
+        props = ['num_labels','training_labels','training_data','validataion_labels','validation_data']
+        for p in props:
+            if hasattr(self,p): setattr(newself,p,getattr(self,p))
+        sd = copy.deepcopy(self.model.state_dict())
+        # change to device value input
+        if device is not None:
+            for k in list(sd.keys()):
+                sd[k] = sd[k].to(device)
+        newself.model.load_state_dict(sd)        
+        return newself
         
     def write(self,outfile,npz=False):
         self.save(outfile,npz=npz)
@@ -246,9 +261,12 @@ class Model(object):
             outdict['training_labels'] = self.training_labels
             np.savez(outfile,**outdict)
         else:
+            # Convert state_dict to cpu
+            temp = self.copy(device='cpu')
             with open(outfile, 'wb') as f:
-                pickle.dump(self, f)
-
+                pickle.dump(temp, f)
+            del temp
+                
     @classmethod
     def read(cls,infile):
         return __class__.load(infile)
