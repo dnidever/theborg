@@ -234,7 +234,8 @@ class Model(object):
             if hasattr(self,p):
                 kwargs[p] = getattr(self,p)
         newself = self.__class__(self.dim_in,self.num_neurons,self.num_features,**kwargs)
-        props = ['validation_labels','validation_data']
+        props = ['validation_labels','validation_data','xmin','xmax','training_loss','validation_loss',
+                 'trained','nhiddenlayers','nlayers']
         for p in props:
             if hasattr(self,p): setattr(newself,p,getattr(self,p))
         sd = copy.deepcopy(self.model.state_dict())
@@ -248,7 +249,7 @@ class Model(object):
     def write(self,outfile,npz=False):
         self.save(outfile,npz=npz)
     
-    def save(self,outfile,npz=False):
+    def save(self,outfile,npz=False,nodata=False):
         """ Write the model to a file."""
         # save parameters and remember how we scaled the labels
         if npz:
@@ -268,6 +269,9 @@ class Model(object):
         else:
             # Convert state_dict to cpu
             temp = self.copy(device='cpu')
+            if nodata:
+                for p in ['training_data','validation_data']:
+                    if hasattr(temp,p): setattr(temp,p,None)
             with open(outfile, 'wb') as f:
                 pickle.dump(temp, f)
             del temp
