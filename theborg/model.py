@@ -33,8 +33,7 @@ class SimpleModel(torch.nn.Module):
 class MultiModel(torch.nn.Module):
     def __init__(self, dim_in, num_neurons, num_features):
         super(MultiModel, self).__init__()
-        if type(num_neurons) is int:
-            num_neurons = [num_neurons]
+        num_neurons = np.atleast_1d(num_neurons)
         flist = [torch.nn.Linear(dim_in, num_neurons[0]),torch.nn.LeakyReLU()]
         for i in range(len(num_neurons)):
             if i==len(num_neurons)-1:
@@ -52,8 +51,9 @@ class MultiModel(torch.nn.Module):
 class Model(object):
     def __init__(self, dim_in=4, num_neurons=100, num_features=500, training_data=None, training_labels=None,
                  learning_rate=1e-4,batch_size=200,label_names=None):
-        if type(num_neurons) is int:
-            self.model = SimpleModel(dim_in, num_neurons, num_features)
+        num_neurons = np.atleast_1d(num_neurons)
+        if len(num_neurons)==1:
+            self.model = SimpleModel(dim_in, num_neurons[0], num_features)
             self.nhiddenlayers = 1
         else:
             self.model = MultiModel(dim_in, num_neurons, num_features)
@@ -84,7 +84,7 @@ class Model(object):
         self.training_labels = training_labels
         self._best_state_dict = None
         self._hull = None
-
+        
     @property
     def device(self):
         """ Returns the device that the data is located on."""
