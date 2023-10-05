@@ -246,8 +246,8 @@ class Model(object):
         newself.model.load_state_dict(sd)        
         return newself
         
-    def write(self,outfile,npz=False):
-        self.save(outfile,npz=npz)
+    def write(self,outfile,**kwargs):
+        self.save(outfile,**kwargs)
     
     def save(self,outfile,npz=False,nodata=False):
         """ Write the model to a file."""
