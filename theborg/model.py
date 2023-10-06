@@ -175,7 +175,7 @@ class Model(object):
         
         # Check that the input labels are inside the trained parameters space
         inside = True
-        clip_labels = labels.copy()
+        clip_labels = np.atleast_1d(labels).copy()
         for i in range(self.num_labels):
             inside1 = (labels[i]>=self.xmin[i]) and (labels[i]<=self.xmax[i])
             if inside1 == False:
