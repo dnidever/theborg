@@ -55,11 +55,12 @@ class Model(object):
         if len(num_neurons)==1:
             self.model = SimpleModel(dim_in, num_neurons[0], num_features)
             self.nhiddenlayers = 1
+            self.num_neurons = num_neurons[0]
         else:
             self.model = MultiModel(dim_in, num_neurons, num_features)
-            self.nhiddenlayers = len(num_neurons)            
+            self.nhiddenlayers = len(num_neurons)
+            self.num_neurons = num_neurons            
         self.dim_in = dim_in
-        self.num_neurons = num_neurons
         self.num_features = num_features
         self.nlayers = self.nhiddenlayers+2
         self.xmin = None
@@ -467,7 +468,7 @@ class Model(object):
             ind = np.delete(ind,vsi)   # remove these from the training set
             validation_data = training_data[vind,:] 
             validation_labels = training_labels[vind,:]
-
+            
         # Re-initialize the model and trained data and history
         self.model = self.model.__class__(num_labels, num_neurons, num_features)
         #self.model = EmulatorModel(num_labels, num_neurons, num_features)
