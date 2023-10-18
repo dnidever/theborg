@@ -43,6 +43,8 @@ def leaky_relu(z):
 class EmulatorModel(torch.nn.Module):
     def __init__(self, dim_in, num_neurons, num_features):
         super(EmulatorModel, self).__init__()
+        if type(num_neurons) is list or type(num_neurons) is np.ndarray:
+            num_neurons = num_neurons[0]
         self.features = torch.nn.Sequential(
             torch.nn.Linear(dim_in, num_neurons),
             torch.nn.LeakyReLU(),

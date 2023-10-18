@@ -19,6 +19,8 @@ from . import radam
 class SimpleModel(torch.nn.Module):
     def __init__(self, dim_in, num_neurons, num_features):
         super(SimpleModel, self).__init__()
+        if type(num_neurons) is list or type(num_neurons) is np.ndarray:
+             num_neurons = num_neurons[0]
         self.features = torch.nn.Sequential(
             torch.nn.Linear(dim_in, num_neurons),
             torch.nn.LeakyReLU(),
@@ -55,11 +57,10 @@ class Model(object):
         if len(num_neurons)==1:
             self.model = SimpleModel(dim_in, num_neurons[0], num_features)
             self.nhiddenlayers = 1
-            self.num_neurons = num_neurons[0]
         else:
             self.model = MultiModel(dim_in, num_neurons, num_features)
             self.nhiddenlayers = len(num_neurons)
-            self.num_neurons = num_neurons            
+        self.num_neurons = num_neurons            
         self.dim_in = dim_in
         self.num_features = num_features
         self.nlayers = self.nhiddenlayers+2
